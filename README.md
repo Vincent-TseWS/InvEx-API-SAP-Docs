@@ -1,532 +1,1110 @@
----
-title: API Reference
+# WMS Core — Public API Integration Guide
 
-language_tabs: # must be one of https://git.io/vQNgJ
-  - python
-  - javascript
+This document provides detailed API specifications for external systems integrating with WMS Core. It includes request/response payloads, field descriptions, required/optional indicators, and integration notes.
 
-toc_footers:
-  - <a href='https://github.com/slatedocs/slate'>Documentation Powered by Slate</a>
+**Base URL:** `{host}/api/`  
+**Content-Type:** `application/json`
 
-includes:
-  - errors
-
-search: true
-
-code_clipboard: true
-
-meta:
-  - name: AS WMS API Document
-    content: Documentation for WMS API
 ---
 
-# Introduction
+## Table of Contents
 
-Welcome to the WMS API! You can use our API to access WMS API endpoints, which can get information on warehouse master, item master and orders in our database.
+1. [Authentication](#1-authentication)
+2. [Item Master](#2-item-master)
+3. [SAP Inbound Order Batch Create](#3-sap-inbound-order-batch-create)
+4. [SAP Outbound Order Batch Create](#4-sap-outbound-order-batch-create)
+5. [SAP Outbound Order Finish](#5-sap-outbound-order-finish)
+6. [Receiving Excel Fulfill (v2)](#6-receiving-excel-fulfill-v2)
+7. [Shipping Excel Fulfill (v2)](#7-shipping-excel-fulfill-v2)
+8. [Transaction Adjustment](#8-transaction-adjustment)
+9. [Bin Transfer](#9-bin-transfer)
+10. [Stock Check](#10-stock-check)
+11. [Inventory Summary](#11-inventory-summary)
+12. [Reference Data](#12-reference-data)
+13. [Error Handling](#13-error-handling)
 
-If anything is missing or seems incorrect, please contact your account manager.
+---
 
-# Authentication
+## 1. Authentication
 
-> To authorize, use this code:
+All API endpoints require authentication via **Token** in the `Authorization` header.
 
-```python
-import requests
+### Header
 
-url = "https://wms-core.ark.space/api/ENDPOINT"
 
-payload = ""
-headers = {
-  'Authorization': 'Token :YOUR_AUTH_TOKEN'
-}
+| Header          | Value                | Required       |
+| --------------- | -------------------- | -------------- |
+| `Authorization` | `Token <your-token>` | Yes            |
+| `Content-Type`  | `application/json`   | Yes (for POST) |
 
-response = requests.request("GET", url, headers=headers, data=payload)
 
-print(response.text)
+### Token Types
 
+- **User Token** — Single token string for user authentication
+- **Client Token** — Format: `{key}-{client_id}` for client-scoped API access (e.g., ERP/SAP integration)
+
+### Example
+
+```http
+Authorization: Token abc123def456
+Content-Type: application/json
 ```
 
-```javascript
-var settings = {
-  "url": "https://wms-core.arkspace.com.hk/api/ENDPOINT",
-  "method": "GET",
-  "timeout": 0,
-  "headers": {
-    "Authorization": "Token :YOUR_AUTH_TOKEN"
-  },
-};
-
-$.ajax(settings).done(function (response) {
-  console.log(response);
-});
-```
-
-> Make sure to replace `:YOUR_AUTH_TOKEN` with your API key.
-
-The WMS uses API Tokens to allow access to the API. You can request for a new API Token by contacting our web admin.
-This system expects for the API token to be included in all API requests to the server in a header that looks like the following:
-
-`Authorization: Token :YOUR_AUTH_TOKEN`
-
-<aside class="notice">
-You must replace <code> :YOUR_AUTH_TOKEN </code> with your Client API key.
-</aside>
-
-# Item Master
-
-## List Item Master
-
-```python
-import requests
-
-url = "https://wms-core.ark.space/api/sap/item_master/"
-
-payload = {}
-headers = {
-  'Authorization': 'Token :YOUR_AUTH_TOKEN'
-}
-
-response = requests.request("GET", url, headers=headers, data=payload)
-
-print(response.text)
-```
-
-```javascript
-var settings = {
-  "url": "https://wms-core.ark.space/api/sap/item_master",
-  "method": "GET",
-  "timeout": 0,
-  "headers": {
-    "Authorization": "Token :YOUR_AUTH_TOKEN"
-  },
-};
-
-$.ajax(settings).done(function (response) {
-  console.log(response);
-});
-```
-
-> The above command returns JSON structured like this:
+### Response (401 Unauthorized)
 
 ```json
 {
-    "result": "Success",
-    "data": [
+  "result": "Failed",
+  "data": null,
+  "error": "Unauthorized"
+}
+```
+
+---
+
+## 2. Item Master
+
+### List Item Master
+
+**Endpoint:** `GET /api/item_master/`  
+**Description:** List item master (SKU) records.
+
+### Query Parameters
+
+
+| Parameter          | Type    | Required | Description                       |
+| ------------------ | ------- | -------- | --------------------------------- |
+| `skip`             | integer | No       | Pagination offset. Default: 0.    |
+| `take`             | integer | No       | Page size. Default: 20, max: 100. |
+| `client_reference` | string  | No       | Filter by client reference.       |
+
+
+### SAP Item Master POST Request
+
+**Endpoint:** `POST /api/sap/item_master/`  
+**Description:** Create a new item master (SKU) record. Requires Client Token authentication.
+
+### Request Payload (POST)
+
+
+| Field                      | Type    | Required | Description                                                                        |
+| -------------------------- | ------- | -------- | ---------------------------------------------------------------------------------- |
+| `client` / `client_code`   | string  | **Yes**  | Client code. Must exist under the token's organization.                            |
+| `item_type`                | string  | **Yes**  | Item type code. Must exist in system.                                              |
+| `product_name`             | string  | **Yes**  | Product display name.                                                              |
+| `item_code` / `code`       | string  | **Yes**  | SKU/item code. Must be unique per client.                                          |
+| `description`              | string  | No       | Product description.                                                               |
+| `upc`                      | string  | No       | UPC/barcode.                                                                       |
+| `remark`                   | string  | No       | Internal remark.                                                                   |
+| `auom_control`             | string  | No       | Alternative UOM control. `DISABLE`, `IN`, `OUT`, `BOTH`. Default: `DISABLE`.       |
+| `expiry_date_control`     | string  | No       | Expiry date control. `DISABLE`, `OUT`, `BOTH`. Default: `DISABLE`.                 |
+| `lot_control`              | string  | No       | Lot number control. `DISABLE`, `OUT`, `BOTH`. Default: `DISABLE`.                  |
+| `serial_number_control`    | string  | No       | Serial number control. `DISABLE`, `OUT`, `BOTH`. Default: `DISABLE`.               |
+| `required_condition`       | string  | No       | Zone condition code (e.g., ambient, chilled). Must exist if provided.              |
+| `force_required_condition` | boolean | No       | Enforce required condition. Default: `false`.                                      |
+| `picking_method`           | string  | No       | `FIFO`, `FEFO`, or `LIFO`. Default: `FEFO` if expiry control enabled, else `FIFO`. |
+| `hs_code`                  | string  | No       | Harmonized System code.                                                            |
+| `custom_code`              | string  | No       | Custom/customer reference code.                                                    |
+| `pick_size`                | integer | No       | Pick size. Default: 0.                                                             |
+| `pack_size`                | integer | No       | Pack size. Default: 0.                                                             |
+| `cost`                     | number  | No       | Cost price. Default: 0.                                                            |
+| `selling`                  | number  | No       | Selling price. Default: 0.                                                         |
+| `msrp`                     | number  | No       | MSRP. Default: 0.                                                                  |
+| `uom`                      | array   | No       | Array of unit-of-measurement objects.                                              |
+| `custom_field`             | array   | No       | Array of custom field objects.                                                     |
+
+
+### UOM Object (each item in `uom`)
+
+
+| Field          | Type    | Required | Description                                              |
+| -------------- | ------- | -------- | -------------------------------------------------------- |
+| `unit`         | string  | **Yes**  | Unit code (e.g., EACH, CTN). Must exist in organization. |
+| `qty`          | number  | No       | Conversion factor to base. Default: 0 (skipped if &lt; 1). |
+| `is_base`      | boolean | No       | Whether this is the base UOM. Default: `false`.          |
+| `length`       | number  | No       | Length (cm).                                             |
+| `width`        | number  | No       | Width (cm).                                              |
+| `height`       | number  | No       | Height (cm).                                             |
+| `gross_weight` | number  | No       | Gross weight (kg).                                       |
+| `net_weight`   | number  | No       | Net weight (kg).                                         |
+
+
+### Custom Field Object (each item in `custom_field`)
+
+
+| Field   | Type   | Required | Description         |
+| ------- | ------ | -------- | ------------------- |
+| `name`  | string | **Yes**  | Custom field name.  |
+| `value` | any    | **Yes**  | Custom field value. |
+
+
+### Example POST Request
+
+```json
+{
+  "client": "DEMOCLIENT",
+  "item_type": "STANDARD",
+  "product_name": "Sample Product",
+  "item_code": "SKU001",
+  "description": "Product description",
+  "upc": "123456789012",
+  "remark": "",
+  "auom_control": "DISABLE",
+  "expiry_date_control": "BOTH",
+  "lot_control": "DISABLE",
+  "serial_number_control": "DISABLE",
+  "picking_method": "FEFO",
+  "hs_code": "",
+  "custom_code": "",
+  "pick_size": 0,
+  "pack_size": 0,
+  "cost": 0,
+  "selling": 0,
+  "msrp": 0,
+  "uom": [
+    {
+      "unit": "EACH",
+      "qty": 1,
+      "is_base": true,
+      "length": 0,
+      "width": 0,
+      "height": 0,
+      "gross_weight": 0,
+      "net_weight": 0
+    }
+  ],
+  "custom_field": []
+}
+```
+
+### Success Response (201) — POST
+
+```json
+{
+  "data": { ... },
+  "error": null
+}
+```
+
+---
+
+### SAP Item Master PUT Request
+
+**Endpoint:** `PUT /api/sap/item_master/<code>/`  
+**Description:** Update an existing item master by SKU code. Requires Client Token authentication. Only the fields provided in the payload are updated; omitted fields retain their current values.
+
+### Request Payload (PUT)
+
+
+| Field          | Type    | Required | Description                                             |
+| -------------- | ------- | -------- | ------------------------------------------------------- |
+| `product_name` | string  | No       | Product display name.                                   |
+| `description`  | string  | No       | Product description.                                    |
+| `upc`          | string  | No       | UPC/barcode.                                            |
+| `remark`       | string  | No       | Internal remark.                                        |
+| `hs_code`      | string  | No       | Harmonized System code.                                 |
+| `custom_code`  | string  | No       | Custom/customer reference code.                         |
+| `pick_method`  | string  | No       | `FIFO`, `FEFO`, or `LIFO`.                              |
+| `pick_size`    | integer | No       | Pick size.                                              |
+| `pack_size`    | integer | No       | Pack size.                                              |
+| `cost`         | number  | No       | Cost price.                                             |
+| `selling`      | number  | No       | Selling price.                                          |
+| `msrp`         | number  | No       | MSRP.                                                   |
+| `custom_field` | array   | No       | Array of custom field objects (same structure as POST). |
+
+
+**Note:** Client, item_type, and item_code cannot be changed via PUT. Control fields (auom_control, expiry_date_control, lot_control, serial_number_control) are not updatable in the current implementation.
+
+### Example PUT Request
+
+```http
+PUT /api/sap/item_master/SKU001/
+Authorization: Token abc123
+Content-Type: application/json
+```
+
+```json
+{
+  "product_name": "Updated Product Name",
+  "description": "Updated description",
+  "upc": "987654321098",
+  "remark": "Updated remark",
+  "hs_code": "1234.56.78",
+  "custom_code": "CUST-001",
+  "pick_method": "FIFO",
+  "pick_size": 1,
+  "pack_size": 12,
+  "cost": 10.50,
+  "selling": 15.00,
+  "msrp": 19.99,
+  "custom_field": [
+    {"name": "color", "value": "red"},
+    {"name": "size", "value": "M"}
+  ]
+}
+```
+
+### Success Response (200) — PUT
+
+```json
+{
+  "data": { ... },
+  "error": null
+}
+```
+
+### Error Response (400 / 404) — POST and PUT
+
+```json
+{
+  "data": null,
+  "error": "Client 'XYZ' not found"
+}
+```
+
+### Validation Notes (Item Master)
+
+- **POST:** Item code must be unique per client; duplicate returns 400.
+- **POST:** Client must exist under the token's organization.
+- **POST:** Item type must exist in the organization.
+- **POST:** Control codes must be valid; invalid values return 400 with allowed list.
+- **PUT:** Item must exist for the token's client; otherwise 404.
+
+---
+
+### SAP Item Master Detail
+
+**Endpoint:** `GET /api/sap/item_master/<code>/`  
+**Description:** Get item master detail by SKU code.
+
+### Example Request
+
+```http
+GET /api/sap/item_master/SKU001/
+Authorization: Token abc123
+```
+
+---
+
+## 3. SAP Inbound Order Batch Create
+
+**Endpoint:** `POST /api/sap/inbound/`  
+**Description:** Create one or more inbound (receiving) orders in a single request. Supports batch creation for ERP/SAP integration.
+
+### Request Payload
+
+
+| Field        | Type    | Required | Description                                                                                  |
+| ------------ | ------- | -------- | -------------------------------------------------------------------------------------------- |
+| `batch_code` | string  | No       | Upload batch identifier for tracking. Used when linked to an Excel upload batch.             |
+| `submit`     | boolean | No       | If `true`, orders are auto-submitted after creation (status: DRAF → SUBM). Default: `false`. |
+| `orders`     | array   | **Yes**  | Array of order objects. At least one order required.                                         |
+
+
+### Order Object (each item in `orders`)
+
+| Field                    | Type   | Required | Description                                                                                                       |
+| ------------------------ | ------ | -------- | ----------------------------------------------------------------------------------------------------------------- |
+| `row_no`                 | string | No       | Row identifier for error reporting. Used in validation messages.                                                  |
+| `organization_code`      | string | **Yes**  | Organization/warehouse code. Must exist in system.                                                                |
+| `client_code`            | string | **Yes**  | Client code. Must exist under the organization.                                                                   |
+| `vendor`                 | object | **Yes**  | Vendor (supplier) information.                                                                                    |
+| `vendor.code`            | string | **Yes**  | Vendor code — key for external system. Auto-created if not exists. `vendor_code` at order level is also accepted. |
+| `vendor.name`            | string | No       | Vendor display name.                                                                                              |
+| `vendor.account`         | string | No       | Account code in external system.                                                                                  |
+| `vendor.email`           | string | No       | Vendor email.                                                                                                     |
+| `vendor.phone`           | string | No       | Vendor phone (e.g., `+(852)91234567`).                                                                            |
+| `courier_code`           | string | No       | Courier code. Must exist in system if provided.                                                                   |
+| `client_reference`       | string | **Yes**  | Unique order reference from your system. Must not duplicate active orders.                                        |
+| `purchase_order`         | string | No       | Purchase order number.                                                                                            |
+| `estimated_arrival_date` | string | **Yes**  | Expected arrival date. Format: `DD-MM-YYYY` or `DD/MM/YYYY`.                                                      |
+| `air_waybill`            | string | No       | Air waybill number.                                                                                               |
+| `waybill`                | string | No       | Waybill/tracking number.                                                                                          |
+| `shipping`               | object | No       | Shipping address. Uses vendor default if empty.                                                                   |
+| `billing`                | object | No       | Billing address. Uses vendor default if empty.                                                                    |
+| `remark`                 | string | No       | Order remark.                                                                                                     |
+| `note_on_document`       | string | No       | Note to appear on documents.                                                                                      |
+| `source`                 | string | No       | Source system identifier.                                                                                         |
+| `external_id`            | string | No       | External system ID for correlation.                                                                               |
+| `dockey`                 | string | No       | SAP document key.                                                                                                 |
+| `order_line`             | array  | **Yes**  | Order line items. At least one line required.                                                                     |
+
+
+### Address Object (`shipping` / `billing`)
+
+
+| Field          | Type   | Required | Description                                               |
+| -------------- | ------ | -------- | --------------------------------------------------------- |
+| `contact_name` | string | No       | Contact person name.                                      |
+| `phone`        | string | No       | Phone number.                                             |
+| `email`        | string | No       | Email address.                                            |
+| `address`      | string | No       | Street address. Warning if empty for shipping.            |
+| `district`     | string | No       | District/region.                                          |
+| `city`         | string | No       | City.                                                     |
+| `country`      | string | No       | Country.                                                  |
+| `postal_code`  | string | No       | Postal/ZIP code.                                          |
+| `address_type` | string | No       | `B` (Business), `R` (Resident), `S` (Shop). Default: `B`. |
+
+
+### Order Line Object (each item in `order_line`)
+
+
+| Field                    | Type          | Required | Description                                                                        |
+| ------------------------ | ------------- | -------- | ---------------------------------------------------------------------------------- |
+| `row_no`                 | string        | No       | Line row identifier for error reporting.                                           |
+| `sku`                    | string        | **Yes**  | SKU/item code. Must exist in item master for the client.                           |
+| `qty`                    | string/number | **Yes**  | Quantity. Must be a positive integer.                                              |
+| `unit`                   | string        | No       | Unit of measure (e.g., EACH, CTN). Must match SKU's UOM. Uses base UOM if omitted. |
+| `exp_date`               | string        | No       | Expiry date. Format: `DD-MM-YYYY`. Required if SKU has expiry control.             |
+| `lot_no`                 | string        | No       | Lot number. Required if SKU has lot control.                                       |
+| `serial_no`              | string        | No       | Serial number. Required if SKU has serial control.                                  |
+| `batch`                  | string        | No       | Batch number.                                                                       |
+| `warehouse_location_code`| string        | No       | Warehouse location code. Must exist in system if provided.                          |
+| `line_remark`            | string        | No       | Line-level remark.                                                                  |
+
+### Example Request
+
+```json
+{
+  "batch_code": "BATCH-2025-001",
+  "submit": false,
+  "orders": [
+    {
+      "row_no": "1",
+      "organization_code": "DEMO",
+      "client_code": "DEMOCLIENT",
+      "vendor": {
+        "code": "VEND001",
+        "name": "Vendor Name",
+        "account": "ACC001",
+        "email": "vendor@example.com",
+        "phone": "+(852)91234567"
+      },
+      "courier_code": "",
+      "client_reference": "INB-2025-001",
+      "purchase_order": "PO-12345",
+      "estimated_arrival_date": "15-03-2025",
+      "air_waybill": "",
+      "waybill": "",
+      "shipping": {
+        "contact_name": "John Doe",
+        "phone": "91234567",
+        "email": "",
+        "address": "123 Warehouse St",
+        "district": "",
+        "city": "Hong Kong",
+        "country": "HK",
+        "postal_code": "",
+        "address_type": "B"
+      },
+      "billing": {
+        "contact_name": "",
+        "phone": "",
+        "email": "",
+        "address": "",
+        "district": "",
+        "city": "",
+        "country": "",
+        "postal_code": "",
+        "address_type": "B"
+      },
+      "remark": "",
+      "note_on_document": "",
+      "dockey": "",
+      "order_line": [
         {
-            "code": "DEMO_SKU_001",
-            "item_type": "Item",
-            "product_name": "DEMO_SKU_001",
-            "description": "This is Demo SKU 001 in DemoClient2",
-            "upc": "123",
-            "expiry_date_control": "DISABLE",
-            "lot_control": "DISABLE",
-            "serial_number_control": "DISABLE",
-            "remark": "",
-            "required_condition": "AMB",
-            "is_condition_force": true,
-            "pick_method": "FIFO",
-            "hs_code": "",
-            "custom_code": "",
-            "pick_size": 1,
-            "pack_size": 1,
-            "uom": [
-                {
-                    "unit": "EACH",
-                    "unit_name": "Each",
-                    "qty": "1.0000",
-                    "is_base": true,
-                    "length": "1.0000",
-                    "width": "1.0000",
-                    "height": "1.0000",
-                    "gross_weight": "1.0000",
-                    "net_weight": "1.0000",
-                    "alt_qty": "1.0000",
-                    "is_alt_base": false
-                }
-            ],
-            "custom_field": []
-        },
-	{
-            "code": "DEMO_SKU_001",
-            "item_type": "Item",
-            "product_name": "DEMO_SKU_001",
-            "description": "This is Demo SKU 001 in DemoClient2",
-            "upc": "123",
-            "expiry_date_control": "DISABLE",
-            "lot_control": "DISABLE",
-            "serial_number_control": "DISABLE",
-            "remark": "",
-            "required_condition": "AMB",
-            "is_condition_force": true,
-            "pick_method": "FIFO",
-            "hs_code": "",
-            "custom_code": "",
-            "pick_size": 1,
-            "pack_size": 1,
-            "uom": [
-                {
-                    "unit": "EACH",
-                    "unit_name": "Each",
-                    "qty": "1.0000",
-                    "is_base": true,
-                    "length": "1.0000",
-                    "width": "1.0000",
-                    "height": "1.0000",
-                    "gross_weight": "1.0000",
-                    "net_weight": "1.0000",
-                    "alt_qty": "1.0000",
-                    "is_alt_base": false
-                }
-            ],
-            "custom_field": []
+          "row_no": "1",
+          "sku": "SKU001",
+          "qty": "100",
+          "unit": "EACH",
+          "exp_date": "31-12-2025",
+          "lot_no": "",
+          "serial_no": "",
+          "batch": "",
+          "warehouse_location_code": "",
+          "line_remark": ""
         }
-    ],
-    "error": null
+      ]
+    }
+  ]
 }
 ```
 
-This endpoint list out item master.
-
-### HTTP Request
-
-`GET https://wms-core.ark.space/api/sap/item_master/`
-
-## Retrieve Item Master Detail
-
-```python
-import requests
-
-url = "https://wms-core.ark.space/api/sap/item_master/:ITEM_CODE/"
-
-payload = {}
-headers = {
-  'Authorization': 'Token :YOUR_AUTH_TOKEN'
-}
-
-response = requests.request("GET", url, headers=headers, data=payload)
-
-print(response.text)
-```
-
-```javascript
-var settings = {
-  "url": "https://wms-core.ark.space/api/sap/item_master/:ITEM_CODE/",
-  "method": "GET",
-  "timeout": 0,
-  "headers": {
-    "Authorization": "Token :YOUR_AUTH_TOKEN"
-  },
-};
-
-$.ajax(settings).done(function (response) {
-  console.log(response);
-});
-```
-
-> The above command returns JSON structured like this:
+### Success Response (200)
 
 ```json
 {
-    "data": {
-        "code": "DEMO_SKU_001",
-        "item_type": {
-            "organization": "DEMO",
-            "code": "ITEM",
-            "name": "Item"
-        },
-        "product_name": "DEMO_SKU_001",
-        "description": "This is Demo SKU 001 in DemoClient2",
-        "upc": "123",
-        "auom_control": "DISABLE",
-        "expiry_date_control": "DISABLE",
-        "lot_control": "DISABLE",
-        "serial_number_control": "DISABLE",
-        "uom": [
-            {
-                "unit": "EACH",
-                "unit_name": "Each",
-                "qty": "1.0000",
-                "is_base": true,
-                "length": "1.0000",
-                "width": "1.0000",
-                "height": "1.0000",
-                "gross_weight": "1.0000",
-                "net_weight": "1.0000",
-                "alt_qty": "1.0000",
-                "is_alt_base": false
-            }
-        ],
-        "custom_field": []
+  "result": "Success",
+  "data": { ... },
+  "error": null
+}
+```
+
+### Error Response (400)
+
+```json
+{
+  "result": "Failed",
+  "data": null,
+  "error": [
+    "row 1: Organization[DEMO] does not exist in system",
+    "row 1: SKU[SKU999] not found in system"
+  ]
+}
+```
+
+### Validation Notes
+
+- **Client Reference** must be unique per client; cannot reuse until order is FINI or CANC.
+- **Vendor** is auto-created if not found (type: VEND).
+- **Estimated Arrival Date** — warning if missing; format must be DD-MM-YYYY.
+- **Expiry Date** — if provided, must be DD-MM-YYYY.
+- **Unit** — must match SKU's configured UOM; otherwise base UOM is used.
+
+---
+
+## 4. SAP Outbound Order Batch Create
+
+**Endpoint:** `POST /api/sap/outbound/`  
+**Description:** Create one or more outbound (shipping) orders in a single request.
+
+### Request Payload
+
+
+| Field        | Type    | Required | Description                                               |
+| ------------ | ------- | -------- | --------------------------------------------------------- |
+| `batch_code` | string  | No       | Upload batch identifier.                                  |
+| `submit`     | boolean | No       | Auto-submit after creation. Default: `true` for outbound. |
+| `orders`     | array   | **Yes**  | Array of order objects.                                   |
+
+
+### Order Object
+
+
+| Field                     | Type   | Required | Description                                                          |
+| ------------------------- | ------ | -------- | -------------------------------------------------------------------- |
+| `row_no`                  | string | No       | Row identifier for errors.                                           |
+| `organization_code`       | string | **Yes**  | Organization code.                                                   |
+| `client_code`             | string | **Yes**  | Client code.                                                         |
+| `customer`                | object | **Yes**  | Customer (relation) information.                                     |
+| `customer.code`           | string | **Yes**  | Customer code — key for external system. Auto-created if not exists. |
+| `customer.name`           | string | No       | Customer display name.                                               |
+| `customer.account`        | string | No       | Account code.                                                        |
+| `customer.email`          | string | No       | Customer email.                                                      |
+| `customer.phone`          | string | No       | Customer phone.                                                      |
+| `courier_code`            | string | No       | Courier code.                                                        |
+| `courier_name`            | string | No       | Courier name (informational).                                        |
+| `client_reference`        | string | **Yes**  | Unique order reference.                                              |
+| `sales_order`             | string | No       | Sales order number.                                                  |
+| `estimated_shipping_date` | string | **Yes**  | Expected shipping date. Format: `DD-MM-YYYY`.                        |
+| `air_waybill`             | string | No       | Air waybill.                                                         |
+| `waybill`                 | string | No       | Waybill.                                                             |
+| `shipping`                | object | No       | Shipping address.                                                    |
+| `billing`                 | object | No       | Billing address.                                                     |
+| `remark`                  | string | No       | Order remark.                                                        |
+| `note_on_document`        | string | No       | Document note.                                                       |
+| `dockey`                  | string | No       | SAP document key.                                                    |
+| `order_line`              | array  | **Yes**  | Order line items.                                                    |
+
+
+### Order Line Object (Outbound)
+
+
+| Field                    | Type          | Required | Description                        |
+| ------------------------ | ------------- | -------- | ---------------------------------- |
+| `row_no`                 | string        | No       | Line row identifier.               |
+| `sku`                    | string        | **Yes**  | SKU code.                          |
+| `qty`                    | string/number | **Yes**  | Quantity. Positive integer.        |
+| `bin_location`           | string        | No       | Preferred bin for pick (if known). |
+| `warehouse_location_code`| string        | No       | Warehouse location code. Must exist in system if provided. |
+| `unit`                   | string        | No       | Unit of measure.                   |
+| `exp_date`               | string        | No       | Expiry date. Format: `DD-MM-YYYY`. |
+| `lot_no`                 | string        | No       | Lot number.                        |
+| `serial_no`              | string        | No       | Serial number.                     |
+| `batch`                  | string        | No       | Batch number.                      |
+| `line_remark`            | string        | No       | Line remark.                       |
+
+### Example Request
+
+```json
+{
+  "batch_code": "BATCH-2025-002",
+  "submit": true,
+  "orders": [
+    {
+      "row_no": "1",
+      "organization_code": "DEMO",
+      "client_code": "DEMOCLIENT",
+      "customer": {
+        "code": "CUST001",
+        "name": "Customer Name",
+        "account": "ACC001",
+        "email": "customer@example.com",
+        "phone": "+(852)91234567"
+      },
+      "courier_code": "DHL",
+      "client_reference": "OUT-2025-001",
+      "sales_order": "SO-12345",
+      "estimated_shipping_date": "20-03-2025",
+      "shipping": {
+        "contact_name": "Jane Doe",
+        "phone": "91234567",
+        "address": "456 Delivery Ave",
+        "city": "Hong Kong",
+        "country": "HK",
+        "address_type": "B"
+      },
+      "billing": {},
+      "order_line": [
+        {
+          "row_no": "1",
+          "sku": "SKU001",
+          "qty": "50",
+          "bin_location": "",
+          "warehouse_location_code": "",
+          "unit": "EACH",
+          "exp_date": "",
+          "lot_no": "",
+          "serial_no": "",
+          "batch": "",
+          "line_remark": ""
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Success / Error Response
+
+Same structure as SAP Inbound. See [Error Handling](#12-error-handling).
+
+### Validation Notes (Outbound)
+
+- **Warehouse Location Code** — if provided, must exist in the organization. When `bin_location` is provided, it takes precedence for `warehouse_location_id`; otherwise `warehouse_location_code` is used.
+
+---
+
+## 5. SAP Outbound Order Finish
+
+**Endpoint:** `PUT /api/sap/outbound/finish/`  
+**Description:** Allows SAP to update the `sap_finish_datetime` when it completes processing an outbound order. This records when SAP signals order completion.
+
+### Authentication
+
+Same as other SAP endpoints. Requires Token in `Authorization` header (User Token or Client Token).
+
+### Request Body
+
+| Field                 | Type   | Required | Description                                                                 |
+| --------------------- | ------ | -------- | --------------------------------------------------------------------------- |
+| `dockey`              | string | No*      | SAP document key. Primary lookup key for the order.                         |
+| `client_reference`    | string | No*      | Client reference. Fallback lookup key if `dockey` is not provided.           |
+| `sap_finish_datetime` | string | **Yes**  | Datetime when SAP finished processing. ISO 8601 format (e.g. `2025-03-04T14:30:00+08:00`). |
+
+\* Either `dockey` or `client_reference` must be provided.
+
+### Example Request
+
+```json
+{
+  "dockey": "SAP_DOC_KEY_123",
+  "sap_finish_datetime": "2025-03-04T14:30:00+08:00"
+}
+```
+
+Or using client_reference:
+
+```json
+{
+  "client_reference": "OUT-2025-001",
+  "sap_finish_datetime": "2025-03-04T14:30:00+08:00"
+}
+```
+
+### Success Response (200)
+
+```json
+{
+  "data": {
+    "client_reference": "OUT-2025-001",
+    "dockey": "SAP_DOC_KEY_123",
+    "sap_finish_datetime": "2025-03-04T14:30:00+08:00"
+  },
+  "error": null
+}
+```
+
+### Error Responses
+
+| Status | Condition |
+| ------ | --------- |
+| 401    | Unauthorized (invalid or missing token) |
+| 400    | Invalid JSON, missing required fields, or invalid datetime format |
+| 404    | Outbound order not found for the given dockey/client_reference |
+
+---
+
+## 6. Receiving Excel Fulfill (v2)
+
+**Endpoint:** `POST /api/receiving/v2/fulfill`  
+**Description:** Batch fulfill (put-away) receiving transactions. Allocates inventory to bin locations for inbound orders.
+
+### Prerequisites
+
+- Requires a valid `batch_code` from an upload batch (Excel or API batch).
+- Transaction must be in status PROC (Processing) or ARRI (Arrived).
+- Transaction type must be INBO (Inbound).
+
+### Request Payload
+
+
+| Field          | Type   | Required | Description                                                          |
+| -------------- | ------ | -------- | -------------------------------------------------------------------- |
+| `batch_code`   | string | **Yes**  | Upload batch identifier. Must be valid and associated with a client. |
+| `transactions` | array  | **Yes**  | Array of transaction fulfill objects.                                |
+
+
+### Transaction Object
+
+
+| Field            | Type    | Required | Description                                                   |
+| ---------------- | ------- | -------- | ------------------------------------------------------------- |
+| `transaction_id` | integer | **Yes**  | WMS transaction ID. Must be INBO type and not DRAF/FINI/CANC. |
+
+
+### Line Item Object (each item in `line_item`)
+
+
+| Field           | Type   | Required | Description                                                            |
+| --------------- | ------ | -------- | ---------------------------------------------------------------------- |
+| `row_no`        | string | No       | Row identifier for errors.                                             |
+| `sku`           | string | **Yes**  | SKU code. Must exist and be active for the batch client.               |
+| `qty`           | number | **Yes**  | Quantity to put away. Must be ≥ 0.                                     |
+| `alt_qty`       | number | No       | Alternative quantity (e.g., in base UOM).                              |
+| `bin_location`  | string | **Yes**  | Bin location code. Must exist and be active. Empty if staging.         |
+| `expiry_date`   | string | No       | Expiry date. Format: `DD-MM-YYYY`. Required if SKU has expiry control. |
+| `lot_number`    | string | No       | Lot number. Required if SKU has lot control.                           |
+| `serial_number` | string | No       | Serial number. Required if SKU has serial control.                     |
+| `batch`         | string | No       | Batch number.                                                          |
+| `line_remark`   | string | No       | Line remark.                                                           |
+
+
+### Example Request
+
+```json
+{
+  "batch_code": "BATCH-2025-001",
+  "transactions": [
+    {
+      "transaction_id": 1234,
+      "line_item": [
+        {
+          "row_no": "1",
+          "sku": "SKU001",
+          "qty": 100,
+          "alt_qty": 100,
+          "bin_location": "FL-4F-1-1B",
+          "expiry_date": "31-12-2025",
+          "lot_number": "LOT001",
+          "serial_number": "",
+          "batch": "",
+          "line_remark": ""
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Success Response (200)
+
+```json
+{
+  "result": "Success",
+  "data": null,
+  "error": null
+}
+```
+
+### Error Response (400)
+
+```json
+{
+  "result": "Failed",
+  "data": null,
+  "error": [
+    "Transaction[id=1234] not found in system",
+    "row:1: Item Master[code=SKU999] not found in system",
+    "row:1: Bin Location[code=INVALID] not found in system"
+  ]
+}
+```
+
+---
+
+## 7. Shipping Excel Fulfill (v2)
+
+**Endpoint:** `POST /api/shipping/v2/fulfill`  
+**Description:** Batch fulfill (pick) shipping transactions for outbound orders.
+
+### Prerequisites
+
+- Valid `batch_code`.
+- Transaction must be OUBO (Outbound) type.
+- Transaction status must allow modification (not DRAF/FINI/CANC).
+
+### Request Payload
+
+Same structure as [Receiving Excel Fulfill](#5-receiving-excel-fulfill-v2), except:
+
+- `transaction_id` must reference an **OUBO** (outbound) transaction.
+- `bin_location` is the bin from which items are picked.
+
+### Example Request
+
+```json
+{
+  "batch_code": "BATCH-2025-002",
+  "transactions": [
+    {
+      "transaction_id": 5678,
+      "line_item": [
+        {
+          "row_no": "1",
+          "sku": "SKU001",
+          "qty": 50,
+          "bin_location": "FL-4F-1-1B",
+          "expiry_date": "31-12-2025",
+          "lot_number": "LOT001",
+          "serial_number": "",
+          "batch": "",
+          "line_remark": ""
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Success / Error Response
+
+Same structure as Receiving Excel Fulfill.
+
+---
+
+## 8. Transaction Adjustment
+
+**Endpoint:** `POST /api/transaction/adjustment`  
+**Description:** Create inventory adjustment transactions (e.g., stock count corrections, write-offs).
+
+### Request Payload
+
+
+| Field          | Type   | Required | Description                              |
+| -------------- | ------ | -------- | ---------------------------------------- |
+| `batch_code`   | string | **Yes**  | Upload batch identifier. Must be valid.  |
+| `transactions` | array  | **Yes**  | Array of adjustment transaction objects. |
+
+
+### Transaction Object
+
+
+| Field               | Type   | Required | Description                           |
+| ------------------- | ------ | -------- | ------------------------------------- |
+| `client_code`       | string | **Yes**  | Client code. Must match batch client. |
+| `organization_code` | string | **Yes**  | Organization code.                    |
+| `client_reference`  | string | No       | Reference for the adjustment.         |
+| `remark`            | string | No       | Transaction remark.                   |
+| `line_item`         | array  | **Yes**  | Adjustment line items.                |
+
+
+### Line Item Object (Adjustment)
+
+
+| Field               | Type    | Required | Description                                                        |
+| ------------------- | ------- | -------- | ------------------------------------------------------------------ |
+| `row_no`            | string  | No       | Row identifier.                                                    |
+| `sku`               | string  | **Yes**  | SKU code. Must exist and be active.                                |
+| `qty`               | integer | **Yes**  | Quantity. **Positive** = increase, **Negative** = decrease.        |
+| `from_bin_location` | string  | **Yes**  | Source bin. Must exist.                                            |
+| `to_bin_location`   | string  | **Yes**  | Destination bin (can be same for pure qty adjustment). Must exist. |
+| `expiry_date`       | string  | No       | Format: `DD-MM-YYYY`.                                              |
+| `lot_number`        | string  | No       | Lot number.                                                        |
+| `serial_number`     | string  | No       | Serial number.                                                     |
+| `batch`             | string  | No       | Batch number.                                                      |
+| `line_remark`       | string  | No       | Line remark.                                                       |
+
+
+### Example Request
+
+```json
+{
+  "batch_code": "BATCH-2025-002",
+  "transactions": [
+    {
+      "client_code": "DEMOCLIENT",
+      "organization_code": "DEMO",
+      "client_reference": "ADJ-2025-001",
+      "remark": "Stock count correction",
+      "line_item": [
+        {
+          "row_no": "1",
+          "sku": "SKU001",
+          "qty": -5,
+          "from_bin_location": "FL-4F-1-1B",
+          "to_bin_location": "FL-4F-1-1B",
+          "expiry_date": "31-12-2025",
+          "lot_number": "LOT001",
+          "serial_number": "",
+          "batch": "",
+          "line_remark": ""
+        }
+      ]
+    }
+  ]
+}
+```
+
+---
+
+## 9. Bin Transfer
+
+**Endpoint:** `POST /api/transaction/bin_transfer`  
+**Description:** Create bin transfer transactions (move inventory between locations).
+
+### Request Payload
+
+Same structure as [Transaction Adjustment](#7-transaction-adjustment), except:
+
+- `qty` must be **positive** (quantity to move).
+- `from_bin_location` — source bin.
+- `to_bin_location` — destination bin. Must be different from source for actual transfer.
+
+### Example Request
+
+```json
+{
+  "batch_code": "BATCH-2025-002",
+  "transactions": [
+    {
+      "client_code": "DEMOCLIENT",
+      "organization_code": "DEMO",
+      "client_reference": "BT-2025-001",
+      "remark": "Relocation",
+      "line_item": [
+        {
+          "row_no": "1",
+          "sku": "SKU001",
+          "qty": 100,
+          "from_bin_location": "FL-4F-1-1B",
+          "to_bin_location": "FL-4F-2-1A",
+          "expiry_date": "31-12-2025",
+          "lot_number": "LOT001",
+          "serial_number": "",
+          "batch": "",
+          "line_remark": ""
+        }
+      ]
+    }
+  ]
+}
+```
+
+---
+
+## 10. Stock Check
+
+**Endpoint:** `GET /api/stock/check`  
+**Description:** Get stock details for a specific SKU.
+
+### Query Parameters
+
+
+| Parameter        | Type    | Required | Description                                       |
+| ---------------- | ------- | -------- | ------------------------------------------------- |
+| `client_id`      | integer | No       | Client ID. Uses user's organization when omitted. |
+| `inventory_code` | string  | **Yes**  | SKU/item code.                                    |
+
+
+### Example Request
+
+```http
+GET /api/stock/check?inventory_code=SKU001
+Authorization: Token abc123
+```
+
+### Success Response (200)
+
+```json
+{
+  "result": "Success",
+  "data": {
+    "total_qty": 1000,
+    "available_qty": 800,
+    "reserved_qty": 150,
+    "received_qty": 50,
+    "packed_qty": 0,
+    "onhold_qty": 0,
+    "bin_details": [ ... ]
+  },
+  "error": null
+}
+```
+
+### Error Response (404)
+
+```json
+{
+  "data": null,
+  "error": "inventory not found"
+}
+```
+
+---
+
+## 11. Inventory Summary
+
+**Endpoint:** `GET /api/inventory/summary`  
+**Description:** Get full stock summary for all SKUs of the authenticated client.
+
+### Authentication
+
+- **User Token** — Returns stock for user's organization (staff) or selected client.
+- **Client Token** — Returns stock for the token's client only.
+
+### Example Request
+
+```http
+GET /api/inventory/summary
+Authorization: Token abc123
+```
+
+### Success Response (200)
+
+```json
+{
+  "result": "Success",
+  "data": {
+    "SKU001": {
+      "total_qty": 1000,
+      "available_qty": 800,
+      "reserved_qty": 150,
+      "received_qty": 50,
+      "packed_qty": 0,
+      "onhold_qty": 0
     },
-    "error": null
-}
-```
-
-This endpoint list the detail of specific Item Master.
-
-### HTTP Request
-
-`GET https://wms-core.ark.space/api/sap/item_master/:ITEM_CODE/`
-
-<aside class="notice">
-You must replace <code> :ITEM_MASTER_CODE </code> with the item code.
-</aside>
-
-## Create a New Item Master
-
-```python
-import requests
-import json
-
-url = "https://wms-core.arkspace.com.hk/api/sap/item_master"
-
-payload = "{
-	"client_code": "DEMO_CLIENT",
-        "code": "DEMO_SKU_001",
-        "item_type": "Item",
-        "product_name": "DEMO_SKU_001",
-        "description": "This is Demo SKU 001 in DemoClient2",
-        "upc": "123",
-        "expiry_date_control": "DISABLE",
-        "lot_control": "DISABLE",
-        "serial_number_control": "DISABLE",
-        "uom": [
-            {
-                "unit": "EACH",
-                "qty": "1.0000",
-                "is_base": true,
-                "length": "1.0000",
-                "width": "1.0000",
-                "height": "1.0000",
-                "gross_weight": "1.0000",
-                "net_weight": "1.0000"
-            }
-        ],
-        "custom_field": [
-            {
-                "name": "Customer Field name",
-                "value": "Customer field value"
-            }
-	]
-    }"
-headers = {
-  'Authorization': 'Token :YOUR_AUTH_TOKEN',
-  'Content-Type': 'application/json'
-}
-
-response = requests.request("POST", url, headers=headers, data=payload)
-
-print(response.text)
-
-```
-
-```javascript
-var settings = {
-  "url": "https://wms-core.arkspace.com.hk/api/sap/item_master",
-  "method": "POST",
-  "timeout": 0,
-  "headers": {
-    "Authorization": "Token YOUR_AUTH_TOKEN",
-    "Content-Type": "application/json"
+    "SKU002": { ... }
   },
-  "data": "{
-	"client_code": "DEMO_CLIENT",
-        "code": "DEMO_SKU_001",
-        "item_type": "Item",
-        "product_name": "DEMO_SKU_001",
-        "description": "This is Demo SKU 001 in DemoClient2",
-        "upc": "123",
-        "expiry_date_control": "DISABLE",
-        "lot_control": "DISABLE",
-        "serial_number_control": "DISABLE",
-        "uom": [
-            {
-                "unit": "EACH",
-                "qty": "1.0000",
-                "is_base": true,
-                "length": "1.0000",
-                "width": "1.0000",
-                "height": "1.0000",
-                "gross_weight": "1.0000",
-                "net_weight": "1.0000"
-            }
-        ],
-        "custom_field": [
-            {
-                "name": "Customer Field name",
-                "value": "Customer field value"
-            }
-	]
-    }",
-};
-
-$.ajax(settings).done(function (response) {
-  console.log(response);
-});
+  "error": null
+}
 ```
 
-> The above command returns JSON structured like this:
+---
+
+## 12. Reference Data
+
+### Address Type
+
+
+| Code | Description |
+| ---- | ----------- |
+| `B`  | Business    |
+| `R`  | Resident    |
+| `S`  | Shop        |
+
+
+### Order Types
+
+
+| Code | Name            |
+| ---- | --------------- |
+| INBO | Inbound         |
+| OUBO | Outbound        |
+| ADJU | Adjustment      |
+| BNTR | Bin Transfer    |
+| CURE | Customer Return |
+| VERE | Vendor Return   |
+
+
+### Order Status
+
+
+| Code | Name          |
+| ---- | ------------- |
+| DRAF | Draft         |
+| SUBM | Submitted     |
+| ARRI | Arrived       |
+| PROC | Processing    |
+| ALLO | Allocated     |
+| R2SH | Ready to Ship |
+| FINI | Finished      |
+| CANC | Cancelled     |
+
+
+### Date Format
+
+All date fields use: `**DD-MM-YYYY**` (e.g., `15-03-2025`). Slash variant `DD/MM/YYYY` is also accepted where applicable.
+
+---
+
+## 13. Error Handling
+
+### Standard Error Response
 
 ```json
 {
-    "result": "Success",
-    "data": None,
-    "error": None,
+  "result": "Failed",
+  "data": null,
+  "error": "Error message or array of validation messages"
 }
 ```
 
-This endpoint create new inbound orders.
+### HTTP Status Codes
 
-### HTTP Request
 
-`POST https://wms-core.arkspace.com.hk/api/sap/item_master`
+| Code | Meaning                                                                                                      |
+| ---- | ------------------------------------------------------------------------------------------------------------ |
+| 200  | Success                                                                                                      |
+| 400  | Bad Request — validation error, invalid payload                                                              |
+| 401  | Unauthorized — missing or invalid token                                                                      |
+| 403  | Forbidden — insufficient permissions                                                                         |
+| 404  | Not Found — resource not found                                                                               |
+| 418  | I'm a teapot — used for "use Order Create API instead" (e.g., when `order_line` is missing in list endpoint) |
 
-### Data Parameters
 
-Parameter | Required | Description
---------- | ------- | -----------
-client_code | Yes | Code referencing which Client the Order belongs to.
-item_type | Yes | Item type code
-product_name | Yes | product name
-description | No | description
-upc | No | UPC code
-expiry_date_control | No | BOTH|DISABLE, Default: DISABLE
-lot_control | No | BOTH|DISABLE, Default: DISABLE
-serial_number_control | No | BOTH|DISABLE, Default: DISABLE
-uom | Yes | Unit of measurement, in list
-uom.unit | Yes | Unit code
-uom.qty | Yes | # of base unit
-uom.is_base | Yes | TRUE|FALSE, to indicate if this uom is base uom or not
-uom.length | No | length of uom in cm, default: 1
-uom.width | No | width of uom in cm, default: 1
-uom.height | No | height of uom in cm, default: 1
-uom.gross_weight | No | Gross Weight of uom in kg, default: 0
-uom.net_weight | No | Net Weight of uom in kg, default: 0
-custom_field | No | Custom Fields, in list
-custom_field.name | Yes | Name of Custom field, must be unique in item master
-custom_field.value | Yes | Value of Custom field
+### Validation Error Format
 
-<aside class="success">
-Remember — item master are managed under item code, duplication of item code is not valid
-</aside>
-
-## Update an Item Master
-
-```python
-import requests
-import json
-
-url = "https://wms-core.arkspace.com.hk/api/sap/item_master/:ITEM_CODE/"
-
-payload = "{
-        "product_name": "DEMO_SKU_001",
-        "description": "This is Demo SKU 001 in DemoClient2",
-        "upc": "123",
-        "uom": [
-            {
-                "unit": "EACH",
-                "qty": "1.0000",
-                "is_base": true,
-                "length": "1.0000",
-                "width": "1.0000",
-                "height": "1.0000",
-                "gross_weight": "1.0000",
-                "net_weight": "1.0000"
-            }
-        ],
-        "custom_field": [
-            {
-                "name": "Customer Field name",
-                "value": "Customer field value"
-            }
-	]
-    }"
-headers = {
-  'Authorization': 'Token :YOUR_AUTH_TOKEN',
-  'Content-Type': 'application/json'
-}
-
-response = requests.request("PUT", url, headers=headers, data=payload)
-
-print(response.text)
-
-```
-
-```javascript
-var settings = {
-  "url": "https://wms-core.arkspace.com.hk/api/sap/item_master/:ITEM_CODE/",
-  "method": "PUT",
-  "timeout": 0,
-  "headers": {
-    "Authorization": "Token YOUR_AUTH_TOKEN",
-    "Content-Type": "application/json"
-  },
-  "data": "{
-        "product_name": "DEMO_SKU_001",
-        "description": "This is Demo SKU 001 in DemoClient2",
-        "upc": "123",
-        "uom": [
-            {
-                "unit": "EACH",
-                "qty": "1.0000",
-                "is_base": true,
-                "length": "1.0000",
-                "width": "1.0000",
-                "height": "1.0000",
-                "gross_weight": "1.0000",
-                "net_weight": "1.0000"
-            }
-        ],
-        "custom_field": [
-            {
-                "name": "Customer Field name",
-                "value": "Customer field value"
-            }
-	]
-    }",
-};
-
-$.ajax(settings).done(function (response) {
-  console.log(response);
-});
-```
-
-> The above command returns JSON structured like this:
+For batch endpoints, `error` may be an array of strings:
 
 ```json
 {
-    "result": "Success",
-    "data": None,
-    "error": None,
+  "result": "Failed",
+  "data": null,
+  "error": [
+    "row 1: Organization[XYZ] does not exist in system",
+    "row 1: SKU[SKU999] not found in system",
+    "row 2: Client Reference[INB-001] already exist in system"
+  ]
 }
 ```
 
-This endpoint create new inbound orders.
+### Integration Tips
 
-### HTTP Request
+1. **Idempotency** — Use unique `client_reference` for orders. Duplicate references are rejected.
+2. **Batch Code** — For batch operations, obtain a valid `batch_code` from your WMS admin or upload workflow.
+3. **Vendor/Customer** — Relations are auto-created when not found. Provide `code` as the primary key.
+4. **Units** — SKUs have configured UOMs. Use `unit` that matches the SKU, or omit to use base UOM.
+5. **SKU Controls** — Ensure `exp_date`, `lot_no`, `serial_no` are provided when the SKU has corresponding controls (expiry, lot, serial).
+6. **Schema Discovery** — Use `GET /api/sap/inbound/` or `GET /api/sap/outbound/` to retrieve example payload schemas.
 
-`PUT https://wms-core.arkspace.com.hk/api/order/item_master/:ITEM_CODE/`
+---
 
-### Data Parameters
+## API Documentation Endpoint
 
-Parameter | Required | Description
---------- | ------- | -----------
-product_name | Yes | product name
-description | No | description
-upc | No | UPC code
-uom | Yes | Unit of measurement, in list. In the update endpoint, it only allows creating new UOM.
-uom.unit | Yes | Unit code
-uom.qty | Yes | # of base unit
-uom.is_base | Yes | TRUE|FALSE, to indicate if this uom is base uom or not
-uom.length | No | length of uom in cm, default: 1
-uom.width | No | width of uom in cm, default: 1
-uom.height | No | height of uom in cm, default: 1
-uom.gross_weight | No | Gross Weight of uom in kg, default: 0
-uom.net_weight | No | Net Weight of uom in kg, default: 0
-custom_field | No | Custom Fields, in list
-custom_field.name | Yes | Name of Custom field, must be unique in item master
-custom_field.value | Yes | Value of Custom field
+**Endpoint:** `GET /api/doc`  
+**Description:** Returns the public API documentation page (HTML).
 
-<aside class="success">
-Remember - most of the field in item master are not allowed to modify after creating.
-</aside>
+---
+
+*Document version: 1.0. Last updated: March 2025.*
