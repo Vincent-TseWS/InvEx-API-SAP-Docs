@@ -12,16 +12,18 @@ This document provides detailed API specifications for external systems integrat
 1. [Authentication](#1-authentication)
 2. [Item Master](#2-item-master)
 3. [SAP Inbound Order Batch Create](#3-sap-inbound-order-batch-create)
-4. [SAP Outbound Order Batch Create](#4-sap-outbound-order-batch-create)
-5. [SAP Outbound Order Finish](#5-sap-outbound-order-finish)
-6. [Receiving Excel Fulfill (v2)](#6-receiving-excel-fulfill-v2)
-7. [Shipping Excel Fulfill (v2)](#7-shipping-excel-fulfill-v2)
-8. [Transaction Adjustment](#8-transaction-adjustment)
-9. [Bin Transfer](#9-bin-transfer)
-10. [Stock Check](#10-stock-check)
-11. [Inventory Summary](#11-inventory-summary)
-12. [Reference Data](#12-reference-data)
-13. [Error Handling](#13-error-handling)
+4. [SAP Inbound Order Update](#4-sap-inbound-order-update)
+5. [SAP Outbound Order Batch Create](#5-sap-outbound-order-batch-create)
+6. [SAP Outbound Order Update](#6-sap-outbound-order-update)
+7. [SAP Outbound Order Finish](#7-sap-outbound-order-finish)
+8. [Receiving Excel Fulfill (v2)](#8-receiving-excel-fulfill-v2)
+9. [Shipping Excel Fulfill (v2)](#9-shipping-excel-fulfill-v2)
+10. [Transaction Adjustment](#10-transaction-adjustment)
+11. [Bin Transfer](#11-bin-transfer)
+12. [Stock Check](#12-stock-check)
+13. [Inventory Summary](#13-inventory-summary)
+14. [Reference Data](#14-reference-data)
+15. [Error Handling](#15-error-handling)
 
 ---
 
@@ -210,10 +212,11 @@ Content-Type: application/json
 | `cost`         | number  | No       | Cost price.                                             |
 | `selling`      | number  | No       | Selling price.                                          |
 | `msrp`         | number  | No       | MSRP.                                                   |
+| `uom`          | array   | No       | Array of UOM objects (same structure as POST). **Only applied when the SKU has no existing UOMs.** If the SKU already has UOMs, the `uom` payload is ignored. |
 | `custom_field` | array   | No       | Array of custom field objects (same structure as POST). |
 
 
-**Note:** Client, item_type, and item_code cannot be changed via PUT. Control fields (auom_control, expiry_date_control, lot_control, serial_number_control) are not updatable in the current implementation.
+**Note:** Client, item_type, and item_code cannot be changed via PUT. Control fields (auom_control, expiry_date_control, lot_control, serial_number_control) are not updatable in the current implementation. **UOM update:** UOMs can only be added via PUT when the SKU has no UOMs yet; once UOMs exist, they cannot be changed via this endpoint.
 
 ### Example PUT Request
 
@@ -237,6 +240,18 @@ Content-Type: application/json
   "cost": 10.50,
   "selling": 15.00,
   "msrp": 19.99,
+  "uom": [
+    {
+      "unit": "EACH",
+      "qty": 1,
+      "is_base": true,
+      "length": 0,
+      "width": 0,
+      "height": 0,
+      "gross_weight": 0,
+      "net_weight": 0
+    }
+  ],
   "custom_field": [
     {"name": "color", "value": "red"},
     {"name": "size", "value": "M"}
@@ -269,6 +284,7 @@ Content-Type: application/json
 - **POST:** Item type must exist in the organization.
 - **POST:** Control codes must be valid; invalid values return 400 with allowed list.
 - **PUT:** Item must exist for the token's client; otherwise 404.
+- **PUT UOM:** UOMs are only applied when the SKU has no existing UOMs. If the SKU already has UOMs, the `uom` array in the payload is ignored.
 
 ---
 
@@ -463,7 +479,94 @@ Authorization: Token abc123
 
 ---
 
-## 4. SAP Outbound Order Batch Create
+## 4. SAP Inbound Order Update
+
+**Endpoint:** `PUT /api/sap/inbound/<client_reference>/`  
+**Description:** Update an inbound order when status is DRAF. Only provided fields are updated. When `order_line` is provided, the entire line set is replaced.
+
+### Prerequisites
+
+- Order must be in status **DRAF**.
+- Order is looked up by `client_reference` (URL) and client from token.
+
+### Request Payload (all fields optional)
+
+| Field                     | Type   | Description                                                                 |
+| ------------------------- | ------ | --------------------------------------------------------------------------- |
+| `purchase_order`          | string | Purchase order number. Maps to Order.PO.                                    |
+| `air_waybill`             | string | Air waybill number.                                                         |
+| `waybill`                 | string | Waybill/tracking number.                                                     |
+| `estimated_arrival_date`  | string | Expected arrival date. Format: DD-MM-YYYY.                                  |
+| `courier_code`            | string | Courier code. Must exist in organization.                                   |
+| `shipping`                | object | Shipping address (contact_name, phone, email, address, district, city, country, postal_code, address_type). |
+| `billing`                 | object | Billing address (same structure).                                            |
+| `remark`                  | string | Order remark.                                                                |
+| `note_on_document`       | string | Note on document.                                                           |
+| `source`                  | string | Source system identifier.                                                   |
+| `order_line`              | array  | Order lines. When provided, replaces entire line set. Same structure as create. |
+
+### Not updatable
+
+- `dockey`, `external_id`, `client`, `relation`, `client_reference`, `type`, `status`
+
+### Example Request
+
+```http
+PUT /api/sap/inbound/INB-2025-001/
+Authorization: Token abc123
+Content-Type: application/json
+```
+
+```json
+{
+  "purchase_order": "PO-99999",
+  "estimated_arrival_date": "20-03-2025",
+  "air_waybill": "AWB123",
+  "waybill": "WB456",
+  "courier_code": "DHL",
+  "shipping": {
+    "contact_name": "Updated Name",
+    "phone": "91234567",
+    "address": "456 New St",
+    "city": "Hong Kong",
+    "country": "HK",
+    "address_type": "B"
+  },
+  "remark": "Updated remark",
+  "order_line": [
+    {
+      "row_no": "1",
+      "sku": "SKU001",
+      "qty": "150",
+      "unit": "EACH",
+      "exp_date": "31-12-2025",
+      "lot_no": "",
+      "line_remark": ""
+    }
+  ]
+}
+```
+
+### Success Response (200)
+
+```json
+{
+  "data": { ... order detail_json_data ... },
+  "error": null
+}
+```
+
+### Error Responses
+
+| Status | Condition |
+| ------ | --------- |
+| 401 | Unauthorized |
+| 404 | Inbound order not found |
+| 400 | Invalid JSON, order not in DRAF status, invalid courier_code, invalid date format, order line validation errors |
+
+---
+
+## 5. SAP Outbound Order Batch Create
 
 **Endpoint:** `POST /api/sap/outbound/`  
 **Description:** Create one or more outbound (shipping) orders in a single request.
@@ -577,7 +680,7 @@ Authorization: Token abc123
 
 ### Success / Error Response
 
-Same structure as SAP Inbound. See [Error Handling](#12-error-handling).
+Same structure as SAP Inbound. See [Error Handling](#15-error-handling).
 
 ### Validation Notes (Outbound)
 
@@ -585,7 +688,85 @@ Same structure as SAP Inbound. See [Error Handling](#12-error-handling).
 
 ---
 
-## 5. SAP Outbound Order Finish
+## 6. SAP Outbound Order Update
+
+**Endpoint:** `PUT /api/sap/outbound/<client_reference>/`  
+**Description:** Update an outbound order when status is DRAF. Only provided fields are updated. When `order_line` is provided, the entire line set is replaced.
+
+### Prerequisites
+
+- Order must be in status **DRAF**.
+- Order is looked up by `client_reference` (URL) and client from token.
+
+### Request Payload (all fields optional)
+
+| Field                      | Type   | Description                                                                 |
+| -------------------------- | ------ | --------------------------------------------------------------------------- |
+| `sales_order`              | string | Sales order number. Maps to Order.PO.                                       |
+| `air_waybill`              | string | Air waybill number.                                                         |
+| `waybill`                  | string | Waybill/tracking number.                                                     |
+| `estimated_shipping_date`  | string | Expected shipping date. Format: DD-MM-YYYY.                                  |
+| `courier_code`             | string | Courier code. Must exist in organization.                                    |
+| `shipping`                 | object | Shipping address (contact_name, phone, email, address, district, city, country, postal_code, address_type). |
+| `billing`                  | object | Billing address (same structure).                                           |
+| `remark`                   | string | Order remark.                                                                |
+| `note_on_document`        | string | Note on document.                                                           |
+| `source`                   | string | Source system identifier.                                                    |
+| `order_line`               | array  | Order lines. When provided, replaces entire line set. Same structure as create. Unit is required per line. |
+
+### Not updatable
+
+- `dockey`, `external_id`, `client`, `relation`, `client_reference`, `type`, `status`
+
+### Example Request
+
+```http
+PUT /api/sap/outbound/OUT-2025-001/
+Authorization: Token abc123
+Content-Type: application/json
+```
+
+```json
+{
+  "sales_order": "SO-99999",
+  "estimated_shipping_date": "25-03-2025",
+  "air_waybill": "AWB456",
+  "courier_code": "DHL",
+  "remark": "Updated remark",
+  "order_line": [
+    {
+      "row_no": "1",
+      "sku": "SKU001",
+      "qty": "75",
+      "unit": "EACH",
+      "bin_location": "",
+      "warehouse_location_code": "",
+      "line_remark": ""
+    }
+  ]
+}
+```
+
+### Success Response (200)
+
+```json
+{
+  "data": { ... order detail_json_data ... },
+  "error": null
+}
+```
+
+### Error Responses
+
+| Status | Condition |
+| ------ | --------- |
+| 401 | Unauthorized |
+| 404 | Outbound order not found |
+| 400 | Invalid JSON, order not in DRAF status, invalid courier_code, invalid date format, order line validation errors |
+
+---
+
+## 7. SAP Outbound Order Finish
 
 **Endpoint:** `PUT /api/sap/outbound/finish/`  
 **Description:** Allows SAP to update the `sap_finish_datetime` when it completes processing an outbound order. This records when SAP signals order completion.
@@ -645,7 +826,7 @@ Or using client_reference:
 
 ---
 
-## 6. Receiving Excel Fulfill (v2)
+## 8. Receiving Excel Fulfill (v2)
 
 **Endpoint:** `POST /api/receiving/v2/fulfill`  
 **Description:** Batch fulfill (put-away) receiving transactions. Allocates inventory to bin locations for inbound orders.
@@ -743,7 +924,7 @@ Or using client_reference:
 
 ---
 
-## 7. Shipping Excel Fulfill (v2)
+## 9. Shipping Excel Fulfill (v2)
 
 **Endpoint:** `POST /api/shipping/v2/fulfill`  
 **Description:** Batch fulfill (pick) shipping transactions for outbound orders.
@@ -756,7 +937,7 @@ Or using client_reference:
 
 ### Request Payload
 
-Same structure as [Receiving Excel Fulfill](#5-receiving-excel-fulfill-v2), except:
+Same structure as [Receiving Excel Fulfill](#8-receiving-excel-fulfill-v2), except:
 
 - `transaction_id` must reference an **OUBO** (outbound) transaction.
 - `bin_location` is the bin from which items are picked.
@@ -793,7 +974,7 @@ Same structure as Receiving Excel Fulfill.
 
 ---
 
-## 8. Transaction Adjustment
+## 10. Transaction Adjustment
 
 **Endpoint:** `POST /api/transaction/adjustment`  
 **Description:** Create inventory adjustment transactions (e.g., stock count corrections, write-offs).
@@ -875,7 +1056,7 @@ Same structure as Receiving Excel Fulfill.
 
 ### Request Payload
 
-Same structure as [Transaction Adjustment](#7-transaction-adjustment), except:
+Same structure as [Transaction Adjustment](#10-transaction-adjustment), except:
 
 - `qty` must be **positive** (quantity to move).
 - `from_bin_location` — source bin.
@@ -913,7 +1094,7 @@ Same structure as [Transaction Adjustment](#7-transaction-adjustment), except:
 
 ---
 
-## 10. Stock Check
+## 12. Stock Check
 
 **Endpoint:** `GET /api/stock/check`  
 **Description:** Get stock details for a specific SKU.
@@ -963,7 +1144,7 @@ Authorization: Token abc123
 
 ---
 
-## 11. Inventory Summary
+## 13. Inventory Summary
 
 **Endpoint:** `GET /api/inventory/summary`  
 **Description:** Get full stock summary for all SKUs of the authenticated client.
@@ -1048,7 +1229,7 @@ All date fields use: `**DD-MM-YYYY**` (e.g., `15-03-2025`). Slash variant `DD/MM
 
 ---
 
-## 13. Error Handling
+## 15. Error Handling
 
 ### Standard Error Response
 
