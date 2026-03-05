@@ -330,7 +330,8 @@ Authorization: Token abc123
 | `vendor.account`         | string | No       | Account code in external system.                                                                                  |
 | `vendor.email`           | string | No       | Vendor email.                                                                                                     |
 | `vendor.phone`           | string | No       | Vendor phone (e.g., `+(852)91234567`).                                                                            |
-| `courier_code`           | string | No       | Courier code. Must exist in system if provided.                                                                   |
+| `courier_code`           | string | No       | Courier code.                                                             |
+| `courier_name`           | string | No       | Courier display name (informational).                                                                               |
 | `client_reference`       | string | **Yes**  | Unique order reference from your system. Must not duplicate active orders.                                        |
 | `purchase_order`         | string | No       | Purchase order number.                                                                                            |
 | `estimated_arrival_date` | string | **Yes**  | Expected arrival date. Format: `DD-MM-YYYY` or `DD/MM/YYYY`.                                                      |
@@ -397,6 +398,7 @@ Authorization: Token abc123
         "phone": "+(852)91234567"
       },
       "courier_code": "",
+      "courier_name": "",
       "client_reference": "INB-2025-001",
       "purchase_order": "PO-12345",
       "estimated_arrival_date": "15-03-2025",
@@ -473,6 +475,7 @@ Authorization: Token abc123
 
 - **Client Reference** must be unique per client; cannot reuse until order is FINI or CANC.
 - **Vendor** is auto-created if not found (type: VEND).
+- **Courier** — `courier_name` is optional and informational.
 - **Estimated Arrival Date** — warning if missing; format must be DD-MM-YYYY.
 - **Expiry Date** — if provided, must be DD-MM-YYYY.
 - **Unit** — must match SKU's configured UOM; otherwise base UOM is used.
@@ -595,8 +598,8 @@ Content-Type: application/json
 | `customer.account`        | string | No       | Account code.                                                        |
 | `customer.email`          | string | No       | Customer email.                                                      |
 | `customer.phone`          | string | No       | Customer phone.                                                      |
-| `courier_code`            | string | No       | Courier code.                                                        |
-| `courier_name`            | string | No       | Courier name (informational).                                        |
+| `courier_code`            | string | No       | Courier code. |
+| `courier_name`            | string | No       | Courier display name (informational). Used in order remark when courier not found in system. |
 | `client_reference`        | string | **Yes**  | Unique order reference.                                              |
 | `sales_order`             | string | No       | Sales order number.                                                  |
 | `estimated_shipping_date` | string | **Yes**  | Expected shipping date. Format: `DD-MM-YYYY`.                        |
@@ -646,6 +649,7 @@ Content-Type: application/json
         "phone": "+(852)91234567"
       },
       "courier_code": "DHL",
+      "courier_name": "DHL Express",
       "client_reference": "OUT-2025-001",
       "sales_order": "SO-12345",
       "estimated_shipping_date": "20-03-2025",
