@@ -13,8 +13,10 @@ This document provides detailed API specifications for external systems integrat
 2. [Item Master](#2-item-master)
 3. [SAP Inbound Order Batch Create](#3-sap-inbound-order-batch-create)
 4. [SAP Inbound Order Update](#4-sap-inbound-order-update)
+4.1. [SAP Inbound Order Cancel](#41-sap-inbound-order-cancel)
 5. [SAP Outbound Order Batch Create](#5-sap-outbound-order-batch-create)
 6. [SAP Outbound Order Update](#6-sap-outbound-order-update)
+6.1. [SAP Outbound Order Cancel](#61-sap-outbound-order-cancel)
 7. [SAP Outbound Order Finish](#7-sap-outbound-order-finish)
 8. [Receiving Excel Fulfill (v2)](#8-receiving-excel-fulfill-v2)
 9. [Shipping Excel Fulfill (v2)](#9-shipping-excel-fulfill-v2)
@@ -484,13 +486,13 @@ Authorization: Token abc123
 
 ## 4. SAP Inbound Order Update
 
-**Endpoint:** `PUT /api/sap/inbound/<client_reference>/`  
+**Endpoint:** `PUT /api/sap/inbound/<dockey>/`  
 **Description:** Update an inbound order when status is DRAF. Only provided fields are updated. When `order_line` is provided, the entire line set is replaced.
 
 ### Prerequisites
 
 - Order must be in status **DRAF**.
-- Order is looked up by `client_reference` (URL) and client from token.
+- Order is looked up by `dockey` (SAP document key, URL path) and client from token.
 
 ### Request Payload (all fields optional)
 
@@ -515,7 +517,7 @@ Authorization: Token abc123
 ### Example Request
 
 ```http
-PUT /api/sap/inbound/INB-2025-001/
+PUT /api/sap/inbound/SAP_DOC_KEY_123/
 Authorization: Token abc123
 Content-Type: application/json
 ```
@@ -566,6 +568,47 @@ Content-Type: application/json
 | 401 | Unauthorized |
 | 404 | Inbound order not found |
 | 400 | Invalid JSON, order not in DRAF status, invalid courier_code, invalid date format, order line validation errors |
+
+---
+
+### 4.1. SAP Inbound Order Cancel
+
+**Endpoint:** `PUT /api/sap/inbound/cancel/<dockey>/`  
+**Description:** Cancels an inbound order when status is DRAF. Only draft orders can be cancelled via this endpoint.
+
+### Prerequisites
+
+- Order must be in status **DRAF**.
+- Order is looked up by `dockey` (SAP document key, URL path) and client from token.
+
+### Request
+
+No request body required. Empty body or `{}` is acceptable.
+
+### Example Request
+
+```http
+PUT /api/sap/inbound/cancel/SAP_DOC_KEY_123/
+Authorization: Token abc123
+Content-Type: application/json
+```
+
+### Success Response (200)
+
+```json
+{
+  "data": { ... order detail_json_data ... },
+  "error": null
+}
+```
+
+### Error Responses
+
+| Status | Condition |
+| ------ | --------- |
+| 401 | Unauthorized |
+| 404 | Inbound order not found |
+| 400 | dockey required, order not in DRAF status (only DRAF orders can be cancelled) |
 
 ---
 
@@ -694,13 +737,13 @@ Same structure as SAP Inbound. See [Error Handling](#15-error-handling).
 
 ## 6. SAP Outbound Order Update
 
-**Endpoint:** `PUT /api/sap/outbound/<client_reference>/`  
+**Endpoint:** `PUT /api/sap/outbound/<dockey>/`  
 **Description:** Update an outbound order when status is DRAF. Only provided fields are updated. When `order_line` is provided, the entire line set is replaced.
 
 ### Prerequisites
 
 - Order must be in status **DRAF**.
-- Order is looked up by `client_reference` (URL) and client from token.
+- Order is looked up by `dockey` (SAP document key, URL path) and client from token.
 
 ### Request Payload (all fields optional)
 
@@ -725,7 +768,7 @@ Same structure as SAP Inbound. See [Error Handling](#15-error-handling).
 ### Example Request
 
 ```http
-PUT /api/sap/outbound/OUT-2025-001/
+PUT /api/sap/outbound/SAP_DOC_KEY_456/
 Authorization: Token abc123
 Content-Type: application/json
 ```
@@ -767,6 +810,47 @@ Content-Type: application/json
 | 401 | Unauthorized |
 | 404 | Outbound order not found |
 | 400 | Invalid JSON, order not in DRAF status, invalid courier_code, invalid date format, order line validation errors |
+
+---
+
+### 6.1. SAP Outbound Order Cancel
+
+**Endpoint:** `PUT /api/sap/outbound/cancel/<dockey>/`  
+**Description:** Cancels an outbound order when status is DRAF. Only draft orders can be cancelled via this endpoint.
+
+### Prerequisites
+
+- Order must be in status **DRAF**.
+- Order is looked up by `dockey` (SAP document key, URL path) and client from token.
+
+### Request
+
+No request body required. Empty body or `{}` is acceptable.
+
+### Example Request
+
+```http
+PUT /api/sap/outbound/cancel/SAP_DOC_KEY_456/
+Authorization: Token abc123
+Content-Type: application/json
+```
+
+### Success Response (200)
+
+```json
+{
+  "data": { ... order detail_json_data ... },
+  "error": null
+}
+```
+
+### Error Responses
+
+| Status | Condition |
+| ------ | --------- |
+| 401 | Unauthorized |
+| 404 | Outbound order not found |
+| 400 | dockey required, order not in DRAF status (only DRAF orders can be cancelled) |
 
 ---
 
