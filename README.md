@@ -13,10 +13,8 @@ This document provides detailed API specifications for external systems integrat
 2. [Item Master](#2-item-master)
 3. [SAP Inbound Order Batch Create](#3-sap-inbound-order-batch-create)
 4. [SAP Inbound Order Update](#4-sap-inbound-order-update)
-4.1. [SAP Inbound Order Cancel](#41-sap-inbound-order-cancel)
 5. [SAP Outbound Order Batch Create](#5-sap-outbound-order-batch-create)
 6. [SAP Outbound Order Update](#6-sap-outbound-order-update)
-6.1. [SAP Outbound Order Cancel](#61-sap-outbound-order-cancel)
 7. [SAP Outbound Order Finish](#7-sap-outbound-order-finish)
 8. [Receiving Excel Fulfill (v2)](#8-receiving-excel-fulfill-v2)
 9. [Shipping Excel Fulfill (v2)](#9-shipping-excel-fulfill-v2)
@@ -99,6 +97,8 @@ Content-Type: application/json
 | `item_code` / `code`       | string  | **Yes**  | SKU/item code. Must be unique per client.                                          |
 | `description`              | string  | No       | Product description.                                                               |
 | `upc`                      | string  | No       | UPC/barcode.                                                                       |
+| `foreign_name`             | string  | No       | Foreign language name (外文名稱).                                                  |
+| `group_name`               | string  | No       | Product grouping name.                                                             |
 | `remark`                   | string  | No       | Internal remark.                                                                   |
 | `auom_control`             | string  | No       | Alternative UOM control. `DISABLE`, `IN`, `OUT`, `BOTH`. Default: `DISABLE`.       |
 | `expiry_date_control`     | string  | No       | Expiry date control. `DISABLE`, `OUT`, `BOTH`. Default: `DISABLE`.                 |
@@ -111,6 +111,12 @@ Content-Type: application/json
 | `custom_code`              | string  | No       | Custom/customer reference code.                                                    |
 | `pick_size`                | integer | No       | Pick size. Default: 0.                                                             |
 | `pack_size`                | integer | No       | Pack size. Default: 0.                                                             |
+| `stock`                    | number  | No       | Stock quantity value. Default: 0.                                                  |
+| `shelf_life`               | integer | No       | Shelf life value. Default: 0.                                                      |
+| `pack_description`         | string  | No       | Pack description text.                                                             |
+| `team`                     | string  | No       | Team name/value.                                                                   |
+| `wight_per_each`           | number  | No       | Weight per each item. Default: 0.                                                  |
+| `weight_unit`              | string  | No       | Weight unit (e.g., `kg`, `g`).                                                     |
 | `cost`                     | number  | No       | Cost price. Default: 0.                                                            |
 | `selling`                  | number  | No       | Selling price. Default: 0.                                                         |
 | `msrp`                     | number  | No       | MSRP. Default: 0.                                                                  |
@@ -152,6 +158,8 @@ Content-Type: application/json
   "item_code": "SKU001",
   "description": "Product description",
   "upc": "123456789012",
+  "foreign_name": "商品外文名稱",
+  "group_name": "RAW_MATERIAL",
   "remark": "",
   "auom_control": "DISABLE",
   "expiry_date_control": "BOTH",
@@ -162,6 +170,12 @@ Content-Type: application/json
   "custom_code": "",
   "pick_size": 0,
   "pack_size": 0,
+  "stock": 0,
+  "shelf_life": 0,
+  "pack_description": "12 packs x 24 each",
+  "team": "TEAM_A",
+  "wight_per_each": 0.25,
+  "weight_unit": "kg",
   "cost": 0,
   "selling": 0,
   "msrp": 0,
@@ -205,12 +219,20 @@ Content-Type: application/json
 | `product_name` | string  | No       | Product display name.                                   |
 | `description`  | string  | No       | Product description.                                    |
 | `upc`          | string  | No       | UPC/barcode.                                            |
+| `foreign_name` | string  | No       | Foreign language name (外文名稱).                       |
+| `group_name`   | string  | No       | Product grouping name.                                  |
 | `remark`       | string  | No       | Internal remark.                                        |
 | `hs_code`      | string  | No       | Harmonized System code.                                 |
 | `custom_code`  | string  | No       | Custom/customer reference code.                         |
 | `pick_method`  | string  | No       | `FIFO`, `FEFO`, or `LIFO`.                              |
 | `pick_size`    | integer | No       | Pick size.                                              |
 | `pack_size`    | integer | No       | Pack size.                                              |
+| `stock`        | number  | No       | Stock quantity value.                                   |
+| `shelf_life`   | integer | No       | Shelf life value.                                       |
+| `pack_description` | string | No    | Pack description text.                                  |
+| `team`         | string  | No       | Team name/value.                                        |
+| `wight_per_each` | number | No      | Weight per each item.                                   |
+| `weight_unit`  | string  | No       | Weight unit (e.g., `kg`, `g`).                          |
 | `cost`         | number  | No       | Cost price.                                             |
 | `selling`      | number  | No       | Selling price.                                          |
 | `msrp`         | number  | No       | MSRP.                                                   |
@@ -233,12 +255,20 @@ Content-Type: application/json
   "product_name": "Updated Product Name",
   "description": "Updated description",
   "upc": "987654321098",
+  "foreign_name": "更新後外文名稱",
+  "group_name": "FG",
   "remark": "Updated remark",
   "hs_code": "1234.56.78",
   "custom_code": "CUST-001",
   "pick_method": "FIFO",
   "pick_size": 1,
   "pack_size": 12,
+  "stock": 100,
+  "shelf_life": 365,
+  "pack_description": "Case pack 12",
+  "team": "TEAM_B",
+  "wight_per_each": 0.3,
+  "weight_unit": "kg",
   "cost": 10.50,
   "selling": 15.00,
   "msrp": 19.99,
@@ -332,8 +362,7 @@ Authorization: Token abc123
 | `vendor.account`         | string | No       | Account code in external system.                                                                                  |
 | `vendor.email`           | string | No       | Vendor email.                                                                                                     |
 | `vendor.phone`           | string | No       | Vendor phone (e.g., `+(852)91234567`).                                                                            |
-| `courier_code`           | string | No       | Courier code.                                                             |
-| `courier_name`           | string | No       | Courier display name (informational).                                                                               |
+| `courier_code`           | string | No       | Courier code. Must exist in system if provided.                                                                   |
 | `client_reference`       | string | **Yes**  | Unique order reference from your system. Must not duplicate active orders.                                        |
 | `purchase_order`         | string | No       | Purchase order number.                                                                                            |
 | `estimated_arrival_date` | string | **Yes**  | Expected arrival date. Format: `DD-MM-YYYY` or `DD/MM/YYYY`.                                                      |
@@ -343,6 +372,9 @@ Authorization: Token abc123
 | `billing`                | object | No       | Billing address. Uses vendor default if empty.                                                                    |
 | `remark`                 | string | No       | Order remark.                                                                                                     |
 | `note_on_document`       | string | No       | Note to appear on documents.                                                                                      |
+| `GR_number`              | string | No       | Goods Receipt number.                                                                                             |
+| `add_by`                 | string | No       | Added-by user/name from source system.                                                                            |
+| `sap_ref_no`             | string | No       | SAP reference number.                                                                                             |
 | `source`                 | string | No       | Source system identifier.                                                                                         |
 | `external_id`            | string | No       | External system ID for correlation.                                                                               |
 | `dockey`                 | string | No       | SAP document key.                                                                                                 |
@@ -400,7 +432,6 @@ Authorization: Token abc123
         "phone": "+(852)91234567"
       },
       "courier_code": "",
-      "courier_name": "",
       "client_reference": "INB-2025-001",
       "purchase_order": "PO-12345",
       "estimated_arrival_date": "15-03-2025",
@@ -430,6 +461,9 @@ Authorization: Token abc123
       },
       "remark": "",
       "note_on_document": "",
+      "GR_number": "GR-000123",
+      "add_by": "api_user",
+      "sap_ref_no": "SAP-REF-001",
       "dockey": "",
       "order_line": [
         {
@@ -477,7 +511,6 @@ Authorization: Token abc123
 
 - **Client Reference** must be unique per client; cannot reuse until order is FINI or CANC.
 - **Vendor** is auto-created if not found (type: VEND).
-- **Courier** — `courier_name` is optional and informational.
 - **Estimated Arrival Date** — warning if missing; format must be DD-MM-YYYY.
 - **Expiry Date** — if provided, must be DD-MM-YYYY.
 - **Unit** — must match SKU's configured UOM; otherwise base UOM is used.
@@ -486,13 +519,13 @@ Authorization: Token abc123
 
 ## 4. SAP Inbound Order Update
 
-**Endpoint:** `PUT /api/sap/inbound/<dockey>/`  
+**Endpoint:** `PUT /api/sap/inbound/<client_reference>/`  
 **Description:** Update an inbound order when status is DRAF. Only provided fields are updated. When `order_line` is provided, the entire line set is replaced.
 
 ### Prerequisites
 
 - Order must be in status **DRAF**.
-- Order is looked up by `dockey` (SAP document key, URL path) and client from token.
+- Order is looked up by `client_reference` (URL) and client from token.
 
 ### Request Payload (all fields optional)
 
@@ -507,6 +540,9 @@ Authorization: Token abc123
 | `billing`                 | object | Billing address (same structure).                                            |
 | `remark`                  | string | Order remark.                                                                |
 | `note_on_document`       | string | Note on document.                                                           |
+| `GR_number`              | string | Goods Receipt number.                                                       |
+| `add_by`                 | string | Added-by user/name from source system.                                      |
+| `sap_ref_no`             | string | SAP reference number.                                                       |
 | `source`                  | string | Source system identifier.                                                   |
 | `order_line`              | array  | Order lines. When provided, replaces entire line set. Same structure as create. |
 
@@ -517,7 +553,7 @@ Authorization: Token abc123
 ### Example Request
 
 ```http
-PUT /api/sap/inbound/SAP_DOC_KEY_123/
+PUT /api/sap/inbound/INB-2025-001/
 Authorization: Token abc123
 Content-Type: application/json
 ```
@@ -538,6 +574,9 @@ Content-Type: application/json
     "address_type": "B"
   },
   "remark": "Updated remark",
+  "GR_number": "GR-000456",
+  "add_by": "sap_bot",
+  "sap_ref_no": "SAP-REF-002",
   "order_line": [
     {
       "row_no": "1",
@@ -571,47 +610,6 @@ Content-Type: application/json
 
 ---
 
-### 4.1. SAP Inbound Order Cancel
-
-**Endpoint:** `PUT /api/sap/inbound/cancel/<dockey>/`  
-**Description:** Cancels an inbound order when status is DRAF. Only draft orders can be cancelled via this endpoint.
-
-### Prerequisites
-
-- Order must be in status **DRAF**.
-- Order is looked up by `dockey` (SAP document key, URL path) and client from token.
-
-### Request
-
-No request body required. Empty body or `{}` is acceptable.
-
-### Example Request
-
-```http
-PUT /api/sap/inbound/cancel/SAP_DOC_KEY_123/
-Authorization: Token abc123
-Content-Type: application/json
-```
-
-### Success Response (200)
-
-```json
-{
-  "data": { ... order detail_json_data ... },
-  "error": null
-}
-```
-
-### Error Responses
-
-| Status | Condition |
-| ------ | --------- |
-| 401 | Unauthorized |
-| 404 | Inbound order not found |
-| 400 | dockey required, order not in DRAF status (only DRAF orders can be cancelled) |
-
----
-
 ## 5. SAP Outbound Order Batch Create
 
 **Endpoint:** `POST /api/sap/outbound/`  
@@ -641,8 +639,8 @@ Content-Type: application/json
 | `customer.account`        | string | No       | Account code.                                                        |
 | `customer.email`          | string | No       | Customer email.                                                      |
 | `customer.phone`          | string | No       | Customer phone.                                                      |
-| `courier_code`            | string | No       | Courier code. |
-| `courier_name`            | string | No       | Courier display name (informational). Used in order remark when courier not found in system. |
+| `courier_code`            | string | No       | Courier code.                                                        |
+| `courier_name`            | string | No       | Courier name (informational).                                        |
 | `client_reference`        | string | **Yes**  | Unique order reference.                                              |
 | `sales_order`             | string | No       | Sales order number.                                                  |
 | `estimated_shipping_date` | string | **Yes**  | Expected shipping date. Format: `DD-MM-YYYY`.                        |
@@ -692,7 +690,6 @@ Content-Type: application/json
         "phone": "+(852)91234567"
       },
       "courier_code": "DHL",
-      "courier_name": "DHL Express",
       "client_reference": "OUT-2025-001",
       "sales_order": "SO-12345",
       "estimated_shipping_date": "20-03-2025",
@@ -737,13 +734,13 @@ Same structure as SAP Inbound. See [Error Handling](#15-error-handling).
 
 ## 6. SAP Outbound Order Update
 
-**Endpoint:** `PUT /api/sap/outbound/<dockey>/`  
+**Endpoint:** `PUT /api/sap/outbound/<client_reference>/`  
 **Description:** Update an outbound order when status is DRAF. Only provided fields are updated. When `order_line` is provided, the entire line set is replaced.
 
 ### Prerequisites
 
 - Order must be in status **DRAF**.
-- Order is looked up by `dockey` (SAP document key, URL path) and client from token.
+- Order is looked up by `client_reference` (URL) and client from token.
 
 ### Request Payload (all fields optional)
 
@@ -768,7 +765,7 @@ Same structure as SAP Inbound. See [Error Handling](#15-error-handling).
 ### Example Request
 
 ```http
-PUT /api/sap/outbound/SAP_DOC_KEY_456/
+PUT /api/sap/outbound/OUT-2025-001/
 Authorization: Token abc123
 Content-Type: application/json
 ```
@@ -810,47 +807,6 @@ Content-Type: application/json
 | 401 | Unauthorized |
 | 404 | Outbound order not found |
 | 400 | Invalid JSON, order not in DRAF status, invalid courier_code, invalid date format, order line validation errors |
-
----
-
-### 6.1. SAP Outbound Order Cancel
-
-**Endpoint:** `PUT /api/sap/outbound/cancel/<dockey>/`  
-**Description:** Cancels an outbound order when status is DRAF. Only draft orders can be cancelled via this endpoint.
-
-### Prerequisites
-
-- Order must be in status **DRAF**.
-- Order is looked up by `dockey` (SAP document key, URL path) and client from token.
-
-### Request
-
-No request body required. Empty body or `{}` is acceptable.
-
-### Example Request
-
-```http
-PUT /api/sap/outbound/cancel/SAP_DOC_KEY_456/
-Authorization: Token abc123
-Content-Type: application/json
-```
-
-### Success Response (200)
-
-```json
-{
-  "data": { ... order detail_json_data ... },
-  "error": null
-}
-```
-
-### Error Responses
-
-| Status | Condition |
-| ------ | --------- |
-| 401 | Unauthorized |
-| 404 | Outbound order not found |
-| 400 | dockey required, order not in DRAF status (only DRAF orders can be cancelled) |
 
 ---
 
